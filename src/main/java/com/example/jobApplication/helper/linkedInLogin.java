@@ -6,8 +6,8 @@ import org.openqa.selenium.WebElement;
 
 
 public class linkedInLogin {
-    private static String username = "kaushalfalke01@gmail.com";
-    private static String password = "kaushalfalke@13022003";
+    private static String username = "fhalkekaushal13@gmail.com";
+    private static String password = "kaushal@13022003";
 
     public static void loginLinkedIn(WebDriver driver){
         try {
