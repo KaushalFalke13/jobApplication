@@ -14,6 +14,7 @@ import org.springframework.stereotype.Service;
 import java.io.File;
 import java.time.Duration;
 import java.util.*;
+import java.util.concurrent.TimeoutException;
 
 @Service
 public class LinkedInService {
@@ -23,45 +24,46 @@ public class LinkedInService {
     private final ObjectMapper mapper = new ObjectMapper();
     private final File cookieFile = new File("linkedin_cookies.json");
 
+    private String getDataByElement(WebElement jobCard, By s) {
+        try {
+            WebElement el = jobCard.findElement(s);
+            String t = el.getText();
+            if (t != null && !t.isBlank())
+                return t;
+        } catch (Exception ignored) {
+        }
+        return "";
+    }
 
- public ArrayList<JobData> extractJobDataFromLinkedIn(WebDriver driver) {
-        WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(60));
+    public ArrayList<JobData> extractJobDataFromLinkedIn(WebDriver driver) throws TimeoutException {
+        WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(30));
+        ArrayList<JobData> jobsList = new ArrayList<>();
 
-        ArrayList<JobData> jobsList = new java.util.ArrayList<>();
+        String baseUrl = createURL();
 
-        // 1. Navigate to the LinkedIn job search page
-        String jobTitle = "software engineer";
-        String location = "India";
-        // int totalPages = 5;
-
-        String baseUrl = "https://www.linkedin.com/jobs/search/?keywords=" +
-                jobTitle.replace(" ", "%20") +
-                "&location=" + location.replace(" ", "%20") +
-                "&f_TPR=r86400" + // Past 24 hours
-                "&f_E=2"; // Entry level
-
-        // 2. Loop through paginated job pages
+        // iterate pages (example loop with 1 page as original)
         for (int i = 0; i < 1; i++) {
             int start = i * 25;
             String pageUrl = baseUrl + "&start=" + start;
-
             driver.get(pageUrl);
 
-            wait.until(ExpectedConditions.visibilityOfElementLocated(By.id("job-details")));
-            List<WebElement> jobCards = driver.findElements(By.cssSelector(".scaffold-layout__list-item"));
+            wait.until(ExpectedConditions
+                    .presenceOfElementLocated(By.cssSelector("ul.jobs-search__results-list, .scaffold-layout__list")));
+
+            List<WebElement> jobCards = driver
+                    .findElements(By.cssSelector(".scaffold-layout__list-item, .jobs-search-results__list-item"));
+
             System.out.println("Found " + jobCards.size() + " job cards on page " + (i + 1));
-            // 3. Extract job data from the listings
-            for (int j = 0; j < jobCards.size(); j++) {
+
+            for (int j = 0; j < 1; j++) {
                 try {
                     WebElement jobCard = jobCards.get(j);
-                    System.out.println("\n============================");
-                    System.out.println("Extracting job #" + (j + 1));
-                    System.out.println("============================");
 
-                    ((JavascriptExecutor) driver).executeScript("arguments[0].scrollIntoView({block:'center'});",
-                            jobCard);
+                    // ((JavascriptExecutor)
+                    // driver).executeScript("arguments[0].scrollIntoView({block:'center'});",
+                    // jobCard);
 
-                    // helper for fallback text
+                    // helper to read text with fallbacks
                     java.util.function.Function<By[], String> readText = (By[] selectors) -> {
                         for (By s : selectors) {
                             try {
@@ -74,129 +76,141 @@ public class LinkedInService {
                         }
                         return "";
                     };
-
-                    // --- JOB URL ---
-                    String jobUrl = "";
-                    try {
-
-                        jobUrl = jobCard.findElement(By.cssSelector("a.job-card-list__title")).getAttribute("href");
-                    } catch (Exception e) {
-                        try {
-                            jobUrl = jobCard.findElement(By.cssSelector("a")).getAttribute("href");
-                        } catch (Exception ignored) {
-                        }
-                    }
-                    if (jobUrl == null || jobUrl.isBlank())
+                    String jobUrl = getURL(jobCard);
+                    if (jobUrl == null || jobUrl.isBlank()) {
+                        System.out.println("❌ Could not find job URL for card index " + j);
                         continue;
-
-                    // --- TITLE ---
-                    String title = readText.apply(new By[] {
-                            By.cssSelector("h3.base-search-card__title"),
-                            By.cssSelector("a.job-card-list__title"),
-                            By.cssSelector("h3")
-                    });
-
-                    // --- COMPANY ---
-                    String company = readText.apply(new By[] {
-                            By.cssSelector(".base-search-card__subtitle"),
-                            By.cssSelector(".job-card-container__company-name"),
-                            By.cssSelector("h4")
-                    });
-
-                    // --- LOCATION ---
-                    String jobLocation = readText.apply(new By[] {
-                            By.cssSelector(".job-card-container__metadata-item"),
-                            By.cssSelector(".job-search-card__location"),
-                            By.cssSelector(".job-card-list__location")
-                    });
-
-                    // --- EASY APPLY ---
-                    boolean isEasyApply = jobCard.getText().toLowerCase().contains("easy apply");
-
-                    // PRINT BASIC INFO BEFORE CLICK
-                    System.out.println("➡ Title:       " + title);
-                    System.out.println("➡ Company:     " + company);
-                    System.out.println("➡ Location:    " + jobLocation);
-                    System.out.println("➡ Easy Apply:  " + isEasyApply);
-                    System.out.println("➡ URL:         " + jobUrl);
-
-                    // --- CLICK JOB TO OPEN DETAILS ---
-                    jobCard.click();
-                    Thread.sleep(1500);
-
-                    // --- WAIT FOR JOB DETAILS PAGE ---
-                    By[] detailSelectors = new By[] {
-                            By.id("job-details"),
-                            By.cssSelector(".jobs-description__content"),
-                            By.cssSelector(".jobs-unified-top-card__content")
-                    };
-
-                    WebElement detailRoot = null;
-                    for (By sel : detailSelectors) {
-                        try {
-                            detailRoot = wait.until(ExpectedConditions.presenceOfElementLocated(sel));
-                            if (detailRoot != null)
-                                break;
-                        } catch (Exception ignored) {
-                        }
                     }
 
-                    // --- DESCRIPTION ---
-                    String description = "";
-                    if (detailRoot != null) {
-                        description = detailRoot.getText();
-                    } else {
-                        description = driver.findElement(By.tagName("body")).getText();
-                    }
+                    String title = getDataByElement(jobCard, By.cssSelector("job-card-list__title"));
+                    System.out.println("➡ Title: " + title);
 
-                    // print only first 150 characters for readability
-                    String shortDescription = description.length() > 150 ? description.substring(0, 150) + "..."
-                            : description;
-                    System.out.println("➡ Description (preview): " + shortDescription);
+                    String company = getDataByElement(jobCard, By.className("GjFeOYQyNDedVmjThBuNySfGRlrupvgzQ"));
+                    System.out.println("➡ Company: " + company);
 
-                    // --- POSTED TIME ---
-                    String postedTime = "";
-                    try {
-                        postedTime = driver.findElement(By.cssSelector(".jobs-unified-top-card__posted-date"))
-                                .getText();
-                    } catch (Exception e1) {
-                        try {
-                            postedTime = driver.findElement(By.xpath("//span[contains(text(),'ago')]")).getText();
-                        } catch (Exception ignored) {
-                        }
-                    }
+                    // find job location from the class name and there is a span tag inside it
+                    String jobLocation = getDataByElement(jobCard,
+                            By.className("TqPYegPEzYXJKvArrSLvTidVpmVOKfHHvzQEhfQ"));
 
-                    System.out.println("➡ Posted:      " + postedTime);
+                    // boolean isEasyApply = jobCard.getText().toLowerCase().contains("easy apply");
 
-                    // --- ADD TO LIST ---
-                    jobsList.add(
-                            new JobData(title, company, jobLocation, postedTime, jobUrl, isEasyApply, description));
+                    // --- Open jobUrl in a new tab to avoid stale elements ---
+                    // String originalHandle = driver.getWindowHandle();
+                    // ((JavascriptExecutor) driver).executeScript("window.open(arguments[0],
+                    // '_blank');", jobUrl);
 
-                    // --- GO BACK TO RESULTS ---
-                    driver.navigate().back();
-                    wait.until(ExpectedConditions
-                            .presenceOfElementLocated(By.cssSelector("ul.jobs-search__results-list")));
+                    // switch to the newly opened tab
+                    // Set<String> handles = driver.getWindowHandles();
+                    // String newHandle = handles.stream().filter(h ->
+                    // !h.equals(originalHandle)).findFirst().orElse(null);
+                    // if (newHandle == null) {
+                    // System.out.println("❌ Could not open new tab for URL: " + jobUrl);
+                    // continue;
+                    // }
+                    // driver.switchTo().window(newHandle);
+
+                    // // wait for job detail content
+                    // WebElement detailRoot = null;
+                    // try {
+                    // By[] detailSelectors = new By[] {
+                    // By.id("job-details"),
+                    // By.cssSelector(".jobs-description__content"),
+                    // By.cssSelector(".jobs-unified-top-card__content"),
+                    // By.cssSelector(".jobs-unified-top-card")
+                    // };
+                    // for (By sel : detailSelectors) {
+                    // try {
+                    // detailRoot = wait.until(ExpectedConditions.presenceOfElementLocated(sel));
+                    // if (detailRoot != null) break;
+                    // } catch (Exception ignored) {}
+                    // }
+                    // } catch (Exception e) {
+                    // // will try fallback to body text
+                    // }
+
+                    // String description = "";
+                    // if (detailRoot != null) {
+                    // try {
+                    // description = detailRoot.getText();
+                    // } catch (Exception e) {
+                    // description = driver.findElement(By.tagName("body")).getText();
+                    // }
+                    // } else {
+                    // // fallback
+                    // description = driver.findElement(By.tagName("body")).getText();
+                    // }
+
+                    // String shortDescription = description.length() > 150 ?
+                    // description.substring(0, 150) + "..." : description;
+                    // System.out.println("➡ Description (preview): " + shortDescription);
+
+                    // // posted time (try a few selectors)
+                    // String postedTime = "";
+                    // try {
+                    // postedTime =
+                    // driver.findElement(By.cssSelector(".jobs-unified-top-card__posted-date,
+                    // .posted-time-ago, span[data-test-posted-date]")).getText();
+                    // } catch (Exception e1) {
+                    // try {
+                    // postedTime =
+                    // driver.findElement(By.xpath("//span[contains(text(),'ago')]")).getText();
+                    // } catch (Exception ignored) {}
+                    // }
+                    // System.out.println("➡ Posted: " + postedTime);
+
+                    // // add to list
+                    // jobsList.add(new JobData(title, company, jobLocation, postedTime, jobUrl,
+                    // isEasyApply, description));
+
+                    // // close detail tab and go back to original
+                    // driver.close();
+                    // driver.switchTo().window(originalHandle);
+
+                    // small explicit wait to ensure results list presence before continuing
+                    // wait.until(ExpectedConditions.presenceOfElementLocated(By.cssSelector("ul.jobs-search__results-list,
+                    // .scaffold-layout__list")));
+
+                    // Optionally: re-find jobCards to avoid using stale references
+                    // jobCards = driver.findElements(By.cssSelector(".scaffold-layout__list-item,
+                    // .jobs-search-results__list-item"));
 
                 } catch (Exception e) {
-                    System.out.println("❌ Error extracting job data: " + e.getMessage());
+                    System.out.println("❌ Error extracting job data at card index " + j + ": " + e.getMessage());
+                    e.printStackTrace();
                 }
             }
-
         }
 
         return jobsList;
     }
 
+    private String createURL() {
+        String jobTitle = "software engineer";
+        String location = "India";
 
+        return "https://www.linkedin.com/jobs/search/?keywords=" +
+                jobTitle.replace(" ", "%20") +
+                "&location=" + location.replace(" ", "%20") +
+                "&f_TPR=r86400" + // Past 24 hours
+                "&f_E=2"; // Entry level
+    }
 
-
-
-
-
-
-
-
-
+    private String getURL(WebElement jobCard) {
+        String jobUrl = "";
+        try {
+            WebElement anchor = jobCard.findElement(By.cssSelector(
+                    "a.job-card-container__link, a[href*='/jobs/view/']"));
+            jobUrl = anchor.getAttribute("href");
+            System.out.println("1 -" + jobUrl);
+        } catch (Exception e) {
+            try {
+                jobUrl = jobCard.findElement(By.cssSelector("a")).getAttribute("href");
+                System.out.println("2 - " + jobUrl);
+            } catch (Exception ignored) {
+            }
+        }
+        return jobUrl;
+    }
 
     private Map<String, Object> cookieToMap(Cookie c) {
         Map<String, Object> m = new HashMap<>();
@@ -247,7 +261,6 @@ public class LinkedInService {
         }
     }
 
-    // Call this at the start of a session to restore cookies
     public void loadCookies(WebDriver driver) {
         Cookie session = driver.manage().getCookieNamed("li_at");
 
@@ -284,7 +297,6 @@ public class LinkedInService {
         }
     }
 
-   
     public List<JobData> filterJobs(List<JobData> jobsList) {
         for (JobData jobData : jobsList) {
             for (String keyword : jobsKeywords) {
