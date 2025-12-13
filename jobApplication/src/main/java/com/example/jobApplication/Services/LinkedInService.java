@@ -18,11 +18,14 @@ import java.util.concurrent.TimeoutException;
 
 @Service
 public class LinkedInService {
-    // private final String username = "fhalkekaushal13@gmail.com";
-    // private final String password = "kaushal@13022003";
     private final List<String> jobsKeywords = List.of("java", "spring boot", "microservices");
     private final ObjectMapper mapper = new ObjectMapper();
     private final File cookieFile = new File("linkedin_cookies.json");
+
+    private void scrollElementToCenter(WebDriver driver, WebElement element) {
+        ((JavascriptExecutor) driver).executeScript(
+                "arguments[0].scrollIntoView({block: 'center'});", element);
+    }
 
     private String getDataByElement(WebElement jobCard, By s) {
         try {
@@ -31,58 +34,57 @@ public class LinkedInService {
             if (t != null && !t.isBlank())
                 return t;
         } catch (Exception ignored) {
+            System.out.println("Element not found");
         }
         return "";
+    }
+
+    private String getURL(WebElement jobCard) {
+        String jobUrl = "";
+        try {
+            WebElement anchor = jobCard.findElement(By.cssSelector(
+                    "a.job-card-container__link, a[href*='/jobs/view/']"));
+            jobUrl = anchor.getAttribute("href");
+        } catch (Exception e) {
+            try {
+                jobUrl = jobCard.findElement(By.cssSelector("a")).getAttribute("href");
+            } catch (Exception ignored) {
+            }
+        }
+        return jobUrl;
     }
 
     public ArrayList<JobData> extractJobDataFromLinkedIn(WebDriver driver) throws TimeoutException {
         WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(30));
         ArrayList<JobData> jobsList = new ArrayList<>();
-
         String baseUrl = createURL();
 
-        // iterate pages (example loop with 1 page as original)
-        for (int i = 0; i < 1; i++) {
+        for (int i = 0; i < 5; i++) {
             int start = i * 25;
             String pageUrl = baseUrl + "&start=" + start;
             driver.get(pageUrl);
 
             wait.until(ExpectedConditions
-                    .presenceOfElementLocated(By.cssSelector("ul.jobs-search__results-list, .scaffold-layout__list")));
+                    .presenceOfElementLocated(By.cssSelector(".scaffold-layout__list")));
+
+            loadAllJobCards(driver, wait);
 
             List<WebElement> jobCards = driver
-                    .findElements(By.cssSelector(".scaffold-layout__list-item, .jobs-search-results__list-item"));
+                    .findElements(By.cssSelector(".scaffold-layout__list-item"));
 
             System.out.println("Found " + jobCards.size() + " job cards on page " + (i + 1));
 
-            for (int j = 0; j < 1; j++) {
+            for (int j = 0; j < jobCards.size(); j++) {
                 try {
                     WebElement jobCard = jobCards.get(j);
 
-                    // ((JavascriptExecutor)
-                    // driver).executeScript("arguments[0].scrollIntoView({block:'center'});",
-                    // jobCard);
-
-                    // helper to read text with fallbacks
-                    java.util.function.Function<By[], String> readText = (By[] selectors) -> {
-                        for (By s : selectors) {
-                            try {
-                                WebElement el = jobCard.findElement(s);
-                                String t = el.getText();
-                                if (t != null && !t.isBlank())
-                                    return t.trim();
-                            } catch (Exception ignored) {
-                            }
-                        }
-                        return "";
-                    };
                     String jobUrl = getURL(jobCard);
                     if (jobUrl == null || jobUrl.isBlank()) {
                         System.out.println("❌ Could not find job URL for card index " + j);
                         continue;
                     }
 
-                    String title = getDataByElement(jobCard, By.cssSelector("job-card-list__title"));
+                    String title = getDataByElement(jobCard, By.tagName("strong"));
                     System.out.println("➡ Title: " + title);
 
                     String company = getDataByElement(jobCard, By.className("GjFeOYQyNDedVmjThBuNySfGRlrupvgzQ"));
@@ -91,88 +93,37 @@ public class LinkedInService {
                     // find job location from the class name and there is a span tag inside it
                     String jobLocation = getDataByElement(jobCard,
                             By.className("TqPYegPEzYXJKvArrSLvTidVpmVOKfHHvzQEhfQ"));
+                    System.out.println("➡ Location: " + jobLocation);
 
-                    // boolean isEasyApply = jobCard.getText().toLowerCase().contains("easy apply");
+                    boolean isEasyApply = jobCard.getText().toLowerCase().contains("easy apply");
+                    System.out.println("➡ Easy Apply: " + isEasyApply);
 
-                    // --- Open jobUrl in a new tab to avoid stale elements ---
-                    // String originalHandle = driver.getWindowHandle();
-                    // ((JavascriptExecutor) driver).executeScript("window.open(arguments[0],
-                    // '_blank');", jobUrl);
+                    scrollElementToCenter(driver, jobCard);
+                    Thread.sleep(2000); // allow lazy load
 
-                    // switch to the newly opened tab
-                    // Set<String> handles = driver.getWindowHandles();
-                    // String newHandle = handles.stream().filter(h ->
-                    // !h.equals(originalHandle)).findFirst().orElse(null);
-                    // if (newHandle == null) {
-                    // System.out.println("❌ Could not open new tab for URL: " + jobUrl);
-                    // continue;
-                    // }
-                    // driver.switchTo().window(newHandle);
+                    jobCard.click();
+                    wait.until(ExpectedConditions
+                            .presenceOfElementLocated(
+                                    By.className("MIQrplfwigEnmEXkKCfrQCCpmYLvSIsHOeIvxDk")));
 
-                    // // wait for job detail content
-                    // WebElement detailRoot = null;
-                    // try {
-                    // By[] detailSelectors = new By[] {
-                    // By.id("job-details"),
-                    // By.cssSelector(".jobs-description__content"),
-                    // By.cssSelector(".jobs-unified-top-card__content"),
-                    // By.cssSelector(".jobs-unified-top-card")
-                    // };
-                    // for (By sel : detailSelectors) {
-                    // try {
-                    // detailRoot = wait.until(ExpectedConditions.presenceOfElementLocated(sel));
-                    // if (detailRoot != null) break;
-                    // } catch (Exception ignored) {}
-                    // }
-                    // } catch (Exception e) {
-                    // // will try fallback to body text
-                    // }
+                    String description = driver.findElement(By.className("MIQrplfwigEnmEXkKCfrQCCpmYLvSIsHOeIvxDk"))
+                            .getText();
+                    System.out.println("➡ Description length: " + description.length());
 
-                    // String description = "";
-                    // if (detailRoot != null) {
-                    // try {
-                    // description = detailRoot.getText();
-                    // } catch (Exception e) {
-                    // description = driver.findElement(By.tagName("body")).getText();
-                    // }
-                    // } else {
-                    // // fallback
-                    // description = driver.findElement(By.tagName("body")).getText();
-                    // }
+                    String postedTime = "";
 
-                    // String shortDescription = description.length() > 150 ?
-                    // description.substring(0, 150) + "..." : description;
-                    // System.out.println("➡ Description (preview): " + shortDescription);
+                    List<WebElement> strongElements = driver.findElements(By.tagName("strong"));
+                    for (WebElement strong : strongElements) {
+                        String text = strong.getText().trim();
+                        if (text.contains("ago")) {
+                            postedTime = text.replace("Reposted", "").trim();
+                            break;
+                        }
+                    }
+                    System.out.println("➡ Posted: " + postedTime);
 
-                    // // posted time (try a few selectors)
-                    // String postedTime = "";
-                    // try {
-                    // postedTime =
-                    // driver.findElement(By.cssSelector(".jobs-unified-top-card__posted-date,
-                    // .posted-time-ago, span[data-test-posted-date]")).getText();
-                    // } catch (Exception e1) {
-                    // try {
-                    // postedTime =
-                    // driver.findElement(By.xpath("//span[contains(text(),'ago')]")).getText();
-                    // } catch (Exception ignored) {}
-                    // }
-                    // System.out.println("➡ Posted: " + postedTime);
-
-                    // // add to list
-                    // jobsList.add(new JobData(title, company, jobLocation, postedTime, jobUrl,
-                    // isEasyApply, description));
-
-                    // // close detail tab and go back to original
-                    // driver.close();
-                    // driver.switchTo().window(originalHandle);
-
-                    // small explicit wait to ensure results list presence before continuing
-                    // wait.until(ExpectedConditions.presenceOfElementLocated(By.cssSelector("ul.jobs-search__results-list,
-                    // .scaffold-layout__list")));
-
-                    // Optionally: re-find jobCards to avoid using stale references
-                    // jobCards = driver.findElements(By.cssSelector(".scaffold-layout__list-item,
-                    // .jobs-search-results__list-item"));
+                    jobsList.add(
+                            new JobData(title, company, jobLocation, postedTime, jobUrl, isEasyApply, description));
 
                 } catch (Exception e) {
                     System.out.println("❌ Error extracting job data at card index " + j + ": " + e.getMessage());
@@ -182,6 +133,41 @@ public class LinkedInService {
         }
 
         return jobsList;
+
+    }
+
+    private void loadAllJobCards(WebDriver driver, WebDriverWait wait) {
+
+        JavascriptExecutor js = (JavascriptExecutor) driver;
+
+        WebElement leftPanel = wait.until(
+                ExpectedConditions.presenceOfElementLocated(
+                        By.cssSelector(".MIQrplfwigEnmEXkKCfrQCCpmYLvSIsHOeIvxDk")));
+
+        int previousCount = 0;
+
+        while (true) {
+            List<WebElement> cards = driver.findElements(
+                    By.cssSelector(".scaffold-layout__list-item"));
+
+            int currentCount = cards.size();
+            System.out.println("Loaded job cards: " + currentCount);
+
+            if (currentCount == previousCount) {
+                break;
+            }
+
+            previousCount = currentCount;
+
+            js.executeScript(
+                    "arguments[0].scrollTop = arguments[0].scrollHeight;",
+                    leftPanel);
+
+            try {
+                Thread.sleep(2000);
+            } catch (InterruptedException ignored) {
+            }
+        }
     }
 
     private String createURL() {
@@ -193,23 +179,6 @@ public class LinkedInService {
                 "&location=" + location.replace(" ", "%20") +
                 "&f_TPR=r86400" + // Past 24 hours
                 "&f_E=2"; // Entry level
-    }
-
-    private String getURL(WebElement jobCard) {
-        String jobUrl = "";
-        try {
-            WebElement anchor = jobCard.findElement(By.cssSelector(
-                    "a.job-card-container__link, a[href*='/jobs/view/']"));
-            jobUrl = anchor.getAttribute("href");
-            System.out.println("1 -" + jobUrl);
-        } catch (Exception e) {
-            try {
-                jobUrl = jobCard.findElement(By.cssSelector("a")).getAttribute("href");
-                System.out.println("2 - " + jobUrl);
-            } catch (Exception ignored) {
-            }
-        }
-        return jobUrl;
     }
 
     private Map<String, Object> cookieToMap(Cookie c) {
