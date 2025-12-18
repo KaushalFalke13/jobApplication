@@ -1,283 +1,241 @@
 package com.example.jobApplication.Services;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.example.jobApplication.Repository.JobData;
-import com.fasterxml.jackson.core.type.TypeReference;
 import org.openqa.selenium.By;
-import org.openqa.selenium.Cookie;
+import org.openqa.selenium.Dimension;
 import org.openqa.selenium.JavascriptExecutor;
+import org.openqa.selenium.Point;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
+import org.openqa.selenium.interactions.Actions;
 import org.openqa.selenium.support.ui.ExpectedConditions;
 import org.openqa.selenium.support.ui.WebDriverWait;
 import org.springframework.stereotype.Service;
-import java.io.File;
 import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.TimeoutException;
 
 @Service
 public class LinkedInService {
-    private final List<String> jobsKeywords = List.of("java", "spring boot", "microservices");
-    private final ObjectMapper mapper = new ObjectMapper();
-    private final File cookieFile = new File("linkedin_cookies.json");
+
+    private static final By JOB_CARD_LOCATOR = By.cssSelector("div[data-job-id]");
+    private static final By JOB_DETAILS_LOCATOR = By.cssSelector("div.jobs-description__content");
+    private final Random random = new Random();
+    private static final Map<String, Integer> SKILL_WEIGHTS = Map.of(
+            "java", 4,
+            "spring boot", 5,
+            "spring", 3,
+            "microservices", 4,
+            "hibernate", 2,
+            "rest", 2,
+            "sql", 2);
+
+    /* -------------------- HUMAN UTILITIES -------------------- */
+
+    private void randomDelay(int min, int max) {
+        try {
+            Thread.sleep(random.nextInt(max - min + 1) + min);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
+    private void readDelay(String text) {
+        int words = text.split("\\s+").length;
+        int delay = Math.min(8000, 1200 + words * 12);
+        randomDelay(delay, delay + 1500);
+    }
+
+    private void moveMouseAndClick(WebDriver driver, WebElement element) {
+        Actions actions = new Actions(driver);
+        actions.moveToElement(element)
+                .pause(Duration.ofMillis(random.nextInt(500) + 300))
+                .moveByOffset(random.nextInt(8) - 4, random.nextInt(8) - 4)
+                .pause(Duration.ofMillis(random.nextInt(300) + 200))
+                .click()
+                .perform();
+    }
 
     private void scrollElementToCenter(WebDriver driver, WebElement element) {
-        ((JavascriptExecutor) driver).executeScript(
-                "arguments[0].scrollIntoView({block: 'center'});", element);
+        ((JavascriptExecutor) driver)
+                .executeScript("arguments[0].scrollIntoView({block:'center'});", element);
     }
 
-    private String getDataByElement(WebElement jobCard, By s) {
-        try {
-            WebElement el = jobCard.findElement(s);
-            String t = el.getText();
-            if (t != null && !t.isBlank())
-                return t;
-        } catch (Exception ignored) {
-            System.out.println("Element not found");
+    private void humanScroll(WebDriver driver, WebElement element) {
+        Actions actions = new Actions(driver);
+        Point p = element.getLocation();
+        Dimension d = element.getSize();
+
+        int targetX = p.getX() + d.getWidth() / 2;
+        int targetY = p.getY() + d.getHeight() / 2;
+
+        int steps = random.nextInt(10) + 10;
+
+        for (int i = 0; i < steps; i++) {
+            int x = targetX + random.nextInt(20) - 10;
+            int y = targetY + random.nextInt(20) - 10;
+            actions.moveByOffset(x / steps, y / steps)
+                    .pause(Duration.ofMillis(random.nextInt(30) + 20));
         }
-        return "";
+
+        actions.click().perform();
     }
 
-    private String getURL(WebElement jobCard) {
-        String jobUrl = "";
-        try {
-            WebElement anchor = jobCard.findElement(By.cssSelector(
-                    "a.job-card-container__link, a[href*='/jobs/view/']"));
-            jobUrl = anchor.getAttribute("href");
-        } catch (Exception e) {
-            try {
-                jobUrl = jobCard.findElement(By.cssSelector("a")).getAttribute("href");
-            } catch (Exception ignored) {
-            }
-        }
-        return jobUrl;
-    }
+    /* -------------------- CORE LOGIC -------------------- */
 
-    public ArrayList<JobData> extractJobDataFromLinkedIn(WebDriver driver) throws TimeoutException {
-        WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(30));
-        ArrayList<JobData> jobsList = new ArrayList<>();
-        String baseUrl = createURL();
+    private String createURL() {
 
-        for (int i = 0; i < 5; i++) {
-            int start = i * 25;
-            String pageUrl = baseUrl + "&start=" + start;
-            driver.get(pageUrl);
+        String encodedTitle = "Java%20Developer";
+        String encodedLocation = "Pune%2C%20Maharashtra%2C%20India";
+        String experience = "2";
 
-            wait.until(ExpectedConditions
-                    .presenceOfElementLocated(By.cssSelector(".scaffold-layout__list")));
-
-            loadAllJobCards(driver, wait);
-
-            List<WebElement> jobCards = driver
-                    .findElements(By.cssSelector(".scaffold-layout__list-item"));
-
-            System.out.println("Found " + jobCards.size() + " job cards on page " + (i + 1));
-
-            for (int j = 0; j < jobCards.size(); j++) {
-                try {
-                    WebElement jobCard = jobCards.get(j);
-
-                    String jobUrl = getURL(jobCard);
-                    if (jobUrl == null || jobUrl.isBlank()) {
-                        System.out.println("❌ Could not find job URL for card index " + j);
-                        continue;
-                    }
-
-                    String title = getDataByElement(jobCard, By.tagName("strong"));
-                    System.out.println("➡ Title: " + title);
-
-                    String company = getDataByElement(jobCard, By.className("GjFeOYQyNDedVmjThBuNySfGRlrupvgzQ"));
-                    System.out.println("➡ Company: " + company);
-
-                    // find job location from the class name and there is a span tag inside it
-                    String jobLocation = getDataByElement(jobCard,
-                            By.className("TqPYegPEzYXJKvArrSLvTidVpmVOKfHHvzQEhfQ"));
-                    System.out.println("➡ Location: " + jobLocation);
-
-                    boolean isEasyApply = jobCard.getText().toLowerCase().contains("easy apply");
-                    System.out.println("➡ Easy Apply: " + isEasyApply);
-
-                    scrollElementToCenter(driver, jobCard);
-                    Thread.sleep(2000); // allow lazy load
-
-                    jobCard.click();
-                    wait.until(ExpectedConditions
-                            .presenceOfElementLocated(
-                                    By.className("MIQrplfwigEnmEXkKCfrQCCpmYLvSIsHOeIvxDk")));
-
-                    String description = driver.findElement(By.className("MIQrplfwigEnmEXkKCfrQCCpmYLvSIsHOeIvxDk"))
-                            .getText();
-                    System.out.println("➡ Description length: " + description.length());
-
-                    String postedTime = "";
-
-                    List<WebElement> strongElements = driver.findElements(By.tagName("strong"));
-                    for (WebElement strong : strongElements) {
-                        String text = strong.getText().trim();
-                        if (text.contains("ago")) {
-                            postedTime = text.replace("Reposted", "").trim();
-                            break;
-                        }
-                    }
-                    System.out.println("➡ Posted: " + postedTime);
-
-                    jobsList.add(
-                            new JobData(title, company, jobLocation, postedTime, jobUrl, isEasyApply, description));
-
-                } catch (Exception e) {
-                    System.out.println("❌ Error extracting job data at card index " + j + ": " + e.getMessage());
-                    e.printStackTrace();
-                }
-            }
-        }
-
-        return jobsList;
-
+        return "https://www.linkedin.com/jobs/search/?" +
+                "keywords=" + encodedTitle +
+                "&location=" + encodedLocation +
+                "&f_TPR=r86400" +
+                "&f_E=" + experience;
     }
 
     private void loadAllJobCards(WebDriver driver, WebDriverWait wait) {
+        WebElement list = wait.until(
+                ExpectedConditions.presenceOfElementLocated(
+                        By.cssSelector(".scaffold-layout__list")));
 
         JavascriptExecutor js = (JavascriptExecutor) driver;
-
-        WebElement leftPanel = wait.until(
-                ExpectedConditions.presenceOfElementLocated(
-                        By.cssSelector(".MIQrplfwigEnmEXkKCfrQCCpmYLvSIsHOeIvxDk")));
-
-        int previousCount = 0;
+        int previousCount = 25;
 
         while (true) {
             List<WebElement> cards = driver.findElements(
                     By.cssSelector(".scaffold-layout__list-item"));
 
-            int currentCount = cards.size();
-            System.out.println("Loaded job cards: " + currentCount);
-
-            if (currentCount == previousCount) {
+            if (cards.size() == previousCount)
                 break;
-            }
-
-            previousCount = currentCount;
 
             js.executeScript(
-                    "arguments[0].scrollTop = arguments[0].scrollHeight;",
-                    leftPanel);
-
-            try {
-                Thread.sleep(2000);
-            } catch (InterruptedException ignored) {
-            }
+                    "arguments[0].scrollTop = arguments[0].scrollHeight;", list);
+            randomDelay(1500, 3500);
         }
     }
 
-    private String createURL() {
-        String jobTitle = "software engineer";
-        String location = "India";
+    public ArrayList<JobData> extractJobsDataFromLinkedIn(WebDriver driver)
+            throws TimeoutException {
 
-        return "https://www.linkedin.com/jobs/search/?keywords=" +
-                jobTitle.replace(" ", "%20") +
-                "&location=" + location.replace(" ", "%20") +
-                "&f_TPR=r86400" + // Past 24 hours
-                "&f_E=2"; // Entry level
-    }
+        WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(12));
+        ArrayList<JobData> jobsList = new ArrayList<>();
+        String baseUrl = createURL();
 
-    private Map<String, Object> cookieToMap(Cookie c) {
-        Map<String, Object> m = new HashMap<>();
-        m.put("name", c.getName());
-        m.put("value", c.getValue());
-        m.put("domain", c.getDomain());
-        m.put("path", c.getPath());
-        m.put("expiry", c.getExpiry() == null ? null : c.getExpiry().getTime());
-        m.put("secure", c.isSecure());
-        m.put("httpOnly", c.isHttpOnly());
-        return m;
-    }
+        int maxJobsThisSession = random.nextInt(11) + 45;
 
-    private Cookie mapToCookie(Map<String, Object> m) {
-        String name = (String) m.get("name");
-        String value = (String) m.get("value");
-        String domain = (String) m.get("domain");
-        String path = (String) m.get("path");
-        Long expiryMillis = m.get("expiry") == null ? null : ((Number) m.get("expiry")).longValue();
-        Date expiry = expiryMillis == null ? null : new Date(expiryMillis);
-        boolean secure = m.get("secure") != null && (Boolean) m.get("secure");
-        boolean httpOnly = m.get("httpOnly") != null && (Boolean) m.get("httpOnly");
+        for (int page = 0; page < 2; page++) {
+            driver.get(baseUrl + "&start=" + (page * 25));
+            randomDelay(4000, 7000);
 
-        Cookie.Builder builder = new Cookie.Builder(name, value)
-                .domain(domain)
-                .path(path);
+            loadAllJobCards(driver, wait);
 
-        if (expiry != null)
-            builder.expiresOn(expiry);
-        if (secure)
-            builder.isSecure(true);
-        if (httpOnly)
-            builder.isHttpOnly(true);
+            List<WebElement> cards = driver.findElements(JOB_CARD_LOCATOR);
 
-        return builder.build();
-    }
+            for (WebElement card : cards) {
 
-    public void saveCookies(WebDriver driver) {
-        Set<Cookie> cookies = driver.manage().getCookies();
-        List<Map<String, Object>> json = new ArrayList<>();
-        for (Cookie c : cookies) {
-            json.add(cookieToMap(c));
-        }
-        try {
-            mapper.writeValue(cookieFile, json);
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to save cookies", e);
-        }
-    }
+                if (jobsList.size() >= maxJobsThisSession)
+                    return jobsList;
 
-    public void loadCookies(WebDriver driver) {
-        Cookie session = driver.manage().getCookieNamed("li_at");
+                // Random skip (human behavior)
+                if (random.nextInt(10) < 2)
+                    continue;
 
-        if (session != null) {
-            System.out.println("Cookie exists!");
-        }
-        try {
-            // Must be on LinkedIn domain before adding cookies
-            driver.get("https://www.linkedin.com");
-            List<Map<String, Object>> json = mapper.readValue(cookieFile,
-                    new TypeReference<List<Map<String, Object>>>() {
-                    });
-            for (Map<String, Object> m : json) {
-                Cookie c = mapToCookie(m);
                 try {
-                    driver.manage().addCookie(c);
-                } catch (Exception addEx) {
-                    // some cookies (e.g. HTTPOnly, Secure) may be rejected — ignore quietly
+                    scrollElementToCenter(driver, card);
+                    randomDelay(800, 2000);
+                    moveMouseAndClick(driver, card);
+                    WebElement descEl = wait.until(
+                            ExpectedConditions.presenceOfElementLocated(JOB_DETAILS_LOCATOR));
+
+                    humanScroll(driver, descEl);
+
+                    String description = descEl.getText();
+                    readDelay(description);
+
+                    String title = card.findElement(
+                            By.xpath(".//a[contains(@href,'/jobs/view')]//strong"))
+                            .getText();
+
+                    String company = card.findElement(
+                            By.xpath(".//div[contains(@class,'entity-lockup__subtitle')]//span"))
+                            .getText();
+
+                    String location = card.findElement(
+                            By.xpath(".//ul[contains(@class,'job-card-container__metadata-wrapper')]//span"))
+                            .getText();
+
+                    boolean easyApply = card.getText().toLowerCase().contains("easy apply");
+
+                    String postedTime = driver.findElements(
+                            By.xpath("//span[contains(text(),'ago')]"))
+                            .stream().findFirst()
+                            .map(WebElement::getText).orElse("");
+
+                    String link = card.findElement(
+                            By.xpath(".//a[contains(@href, '/jobs/view')]")).getAttribute("href");
+
+                    JobData jobData = JobData.builder()
+                            .title(title)
+                            .company(company)
+                            .location(location)
+                            .posted(postedTime)
+                            .jobUrl(link)
+                            .isEasyApply(easyApply)
+                            .description(description)
+                            .build();
+
+                    jobsList.add(jobData);
+
+                    if (random.nextBoolean()) {
+                        driver.navigate().back();
+                        randomDelay(2000, 4000);
+                    }
+
+                } catch (Exception ignored) {
                 }
             }
-            // navigate again to apply restored cookies
-            driver.get("https://www.linkedin.com/feed/");
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to load cookies", e);
         }
-    }
-
-    public void ensureLoggedIn(WebDriver driver) {
-        driver.get("https://www.linkedin.com/feed/");
-        if (driver.getCurrentUrl().contains("/login")) {
-            System.out.println("Not logged in: please complete login + 2FA in the opened browser.");
-        } else {
-            System.out.println("Already logged in (session active).");
-        }
-    }
-
-    public List<JobData> filterJobs(List<JobData> jobsList) {
-        for (JobData jobData : jobsList) {
-            for (String keyword : jobsKeywords) {
-                if (jobData.getDescription().contains(keyword)) {
-                    jobData.setScore(jobData.getScore() + 1);
-                }
-            }
-        }
-
-        jobsList.stream().filter(j -> j.getScore() > 1)
-                .sorted((j1, j2) -> Integer.compare(j2.getScore(), j1.getScore()));
         return jobsList;
+    }
+
+    private int calculateScore(JobData job) {
+
+        int score = 0;
+        String title = job.getTitle().toLowerCase();
+        String desc = job.getDescription().toLowerCase();
+
+        for (var entry : SKILL_WEIGHTS.entrySet()) {
+            if (title.contains(entry.getKey()) || desc.contains(entry.getKey())) {
+                score += entry.getValue();
+            }
+        }
+
+        if (job.isEasyApply())
+            score += 3;
+        if (desc.contains("5+ years") || desc.contains("5 years"))
+            score -= 3;
+        if (desc.contains("7+ years") || desc.contains("8+ years"))
+            score -= 5;
+        if (title.contains("senior") || title.contains("lead"))
+            score -= 4;
+        if (title.contains("principal") || title.contains("staff"))
+            score -= 6;
+        if (desc.contains("0-2 years") || desc.contains("freshers"))
+            score += 3;
+        return Math.max(score, 0);
+    }
+
+    public List<JobData> filterBestJobs(List<JobData> jobs) {
+
+        jobs.forEach(job -> job.setScore(calculateScore(job)));
+        return jobs.stream()
+                .filter(job -> job.getScore() >= 7)
+                .sorted(Comparator.comparingInt(JobData::getScore).reversed())
+                .limit(30)
+                .toList();
     }
 
 }

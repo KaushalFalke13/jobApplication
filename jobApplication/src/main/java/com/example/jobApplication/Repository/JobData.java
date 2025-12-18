@@ -1,26 +1,24 @@
 package com.example.jobApplication.Repository;
 
+import java.time.LocalDateTime;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 // import jakarta.persistence.Entity;
 import lombok.Getter;
+import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 // @Entity
 @Getter
 @Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
 public class JobData {
-   
-    
-    String title, company, location, posted, jobUrl, description;
-    boolean isEasyApply;
-    int id , score;
 
-public JobData(String title, String company, String location, String posted, String jobUrl, boolean isEasyApply, String description) {
-                this.title = title;
-                this.company = company;
-                this.location = location;
-                this.posted = posted;
-                this.jobUrl = jobUrl;
-                this.isEasyApply = isEasyApply;
-                this.description = description;
-            }
+    private String title, company, location, posted, jobUrl, description;
+    private boolean isEasyApply;
+    private int id, score;
+    // @CreationTimestamp
+    private LocalDateTime createdAt;
 }
