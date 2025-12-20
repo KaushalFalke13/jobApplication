@@ -1,6 +1,9 @@
 package com.example.jobApplication.Repository;
 
 import java.time.LocalDateTime;
+
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 // import jakarta.persistence.Entity;
@@ -14,6 +17,7 @@ import lombok.Setter;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class JobData {
 
     private String title, company, location, posted, jobUrl, description;

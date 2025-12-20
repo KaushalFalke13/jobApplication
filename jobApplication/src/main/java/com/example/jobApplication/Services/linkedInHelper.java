@@ -98,8 +98,4 @@ public class linkedInHelper {
         }
     }
 
-    public String getResumeText() {
-        throw new UnsupportedOperationException("Unimplemented method 'getResumeText'");
-    }
-
 }

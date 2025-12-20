@@ -1,26 +1,22 @@
 package com.example.jobApplication.Services;
 
 import com.example.jobApplication.Repository.JobData;
-import org.openqa.selenium.By;
-import org.openqa.selenium.Dimension;
-import org.openqa.selenium.JavascriptExecutor;
-import org.openqa.selenium.Point;
-import org.openqa.selenium.WebDriver;
-import org.openqa.selenium.WebElement;
+import org.openqa.selenium.*;
 import org.openqa.selenium.interactions.Actions;
 import org.openqa.selenium.support.ui.ExpectedConditions;
 import org.openqa.selenium.support.ui.WebDriverWait;
 import org.springframework.stereotype.Service;
 import java.time.Duration;
 import java.util.*;
-import java.util.concurrent.TimeoutException;
 
 @Service
 public class LinkedInService {
 
     private static final By JOB_CARD_LOCATOR = By.cssSelector("div[data-job-id]");
     private static final By JOB_DETAILS_LOCATOR = By.cssSelector("div.jobs-description__content");
+
     private final Random random = new Random();
+
     private static final Map<String, Integer> SKILL_WEIGHTS = Map.of(
             "java", 4,
             "spring boot", 5,
@@ -46,160 +42,158 @@ public class LinkedInService {
         randomDelay(delay, delay + 1500);
     }
 
-    private void moveMouseAndClick(WebDriver driver, WebElement element) {
-        Actions actions = new Actions(driver);
-        actions.moveToElement(element)
-                .pause(Duration.ofMillis(random.nextInt(500) + 300))
-                .moveByOffset(random.nextInt(8) - 4, random.nextInt(8) - 4)
-                .pause(Duration.ofMillis(random.nextInt(300) + 200))
-                .click()
-                .perform();
-    }
+    private void safeClick(WebDriver driver, WebElement element) {
+        JavascriptExecutor js = (JavascriptExecutor) driver;
 
-    private void scrollElementToCenter(WebDriver driver, WebElement element) {
-        ((JavascriptExecutor) driver)
-                .executeScript("arguments[0].scrollIntoView({block:'center'});", element);
-    }
+        js.executeScript("arguments[0].scrollIntoView({block:'center'});", element);
+        randomDelay(300, 600);
 
-    private void humanScroll(WebDriver driver, WebElement element) {
-        Actions actions = new Actions(driver);
-        Point p = element.getLocation();
-        Dimension d = element.getSize();
-
-        int targetX = p.getX() + d.getWidth() / 2;
-        int targetY = p.getY() + d.getHeight() / 2;
-
-        int steps = random.nextInt(10) + 10;
-
-        for (int i = 0; i < steps; i++) {
-            int x = targetX + random.nextInt(20) - 10;
-            int y = targetY + random.nextInt(20) - 10;
-            actions.moveByOffset(x / steps, y / steps)
-                    .pause(Duration.ofMillis(random.nextInt(30) + 20));
+        try {
+            new Actions(driver)
+                    .moveToElement(element)
+                    .pause(Duration.ofMillis(200))
+                    .click()
+                    .perform();
+        } catch (Exception e) {
+            js.executeScript("arguments[0].click();", element);
         }
-
-        actions.click().perform();
     }
 
     /* -------------------- CORE LOGIC -------------------- */
 
     private String createURL() {
-
-        String encodedTitle = "Java%20Developer";
-        String encodedLocation = "Pune%2C%20Maharashtra%2C%20India";
-        String experience = "2";
-
         return "https://www.linkedin.com/jobs/search/?" +
-                "keywords=" + encodedTitle +
-                "&location=" + encodedLocation +
+                "keywords=Java%20Developer" +
+                "&location=Pune%2C%20Maharashtra%2C%20India" +
                 "&f_TPR=r86400" +
-                "&f_E=" + experience;
+                "&f_E=2";
     }
 
+    /**
+     * Scroll job list until LinkedIn stops loading more cards
+     */
     private void loadAllJobCards(WebDriver driver, WebDriverWait wait) {
         WebElement list = wait.until(
                 ExpectedConditions.presenceOfElementLocated(
                         By.cssSelector(".scaffold-layout__list")));
 
         JavascriptExecutor js = (JavascriptExecutor) driver;
-        int previousCount = 25;
+        int previousCount = 0;
 
         while (true) {
-            List<WebElement> cards = driver.findElements(
-                    By.cssSelector(".scaffold-layout__list-item"));
+            List<WebElement> cards = driver.findElements(By.cssSelector(".scaffold-layout__list-item"));
 
             if (cards.size() == previousCount)
                 break;
 
+            previousCount = cards.size();
+
             js.executeScript(
                     "arguments[0].scrollTop = arguments[0].scrollHeight;", list);
-            randomDelay(1500, 3500);
+
+            randomDelay(1500, 3000);
         }
     }
 
-    public ArrayList<JobData> extractJobsDataFromLinkedIn(WebDriver driver)
-            throws TimeoutException {
+    /* -------------------- EXTRACTION -------------------- */
+
+    public ArrayList<JobData> extractJobsDataFromLinkedIn(WebDriver driver) {
 
         WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(12));
         ArrayList<JobData> jobsList = new ArrayList<>();
-        String baseUrl = createURL();
+
+        driver.get(createURL());
+        randomDelay(4000, 7000);
+
+        loadAllJobCards(driver, wait);
 
         int maxJobsThisSession = random.nextInt(11) + 45;
 
-        for (int page = 0; page < 2; page++) {
-            driver.get(baseUrl + "&start=" + (page * 25));
-            randomDelay(4000, 7000);
+        for (int i = 0; i < driver.findElements(JOB_CARD_LOCATOR).size(); i++) {
 
-            loadAllJobCards(driver, wait);
+            if (jobsList.size() >= maxJobsThisSession)
+                break;
 
-            List<WebElement> cards = driver.findElements(JOB_CARD_LOCATOR);
+            if (random.nextInt(10) < 2)
+                continue;
 
-            for (WebElement card : cards) {
+            try {
+                // Re-fetch card to avoid stale reference
+                WebElement card = driver.findElements(JOB_CARD_LOCATOR).get(i);
 
-                if (jobsList.size() >= maxJobsThisSession)
-                    return jobsList;
+                // Click card (updates right panel)
+                safeClick(driver, card);
 
-                // Random skip (human behavior)
-                if (random.nextInt(10) < 2)
-                    continue;
+                // Wait for new description
+                WebElement descEl = wait.until(
+                        ExpectedConditions.visibilityOfElementLocated(JOB_DETAILS_LOCATOR));
+                String description = descEl.getText();
+                System.out.println("Description -" + description.length());
+                readDelay(description);
 
-                try {
-                    scrollElementToCenter(driver, card);
-                    randomDelay(800, 2000);
-                    moveMouseAndClick(driver, card);
-                    WebElement descEl = wait.until(
-                            ExpectedConditions.presenceOfElementLocated(JOB_DETAILS_LOCATOR));
+                String title = card.findElement(
+                        By.xpath(".//a[contains(@href,'/jobs/view')]//span[@aria-hidden='true']//strong")).getText();
+                System.out.println("title -" + title);
 
-                    humanScroll(driver, descEl);
+                String company = card.findElement(
+                        By.xpath(".//div[contains(@class,'entity-lockup__subtitle')]//span"))
+                        .getText();
+                System.out.println("company -" + company);
 
-                    String description = descEl.getText();
-                    readDelay(description);
+                String location = card.findElement(
+                        By.xpath(".//ul[contains(@class,'job-card-container__metadata-wrapper')]/li[1]//span"))
+                        .getText();
+                System.out.println("location -" + location);
 
-                    String title = card.findElement(
-                            By.xpath(".//a[contains(@href,'/jobs/view')]//strong"))
-                            .getText();
+                boolean easyApply = card.getText().toLowerCase().contains("easy apply");
 
-                    String company = card.findElement(
-                            By.xpath(".//div[contains(@class,'entity-lockup__subtitle')]//span"))
-                            .getText();
-
-                    String location = card.findElement(
-                            By.xpath(".//ul[contains(@class,'job-card-container__metadata-wrapper')]//span"))
-                            .getText();
-
-                    boolean easyApply = card.getText().toLowerCase().contains("easy apply");
-
-                    String postedTime = driver.findElements(
-                            By.xpath("//span[contains(text(),'ago')]"))
-                            .stream().findFirst()
-                            .map(WebElement::getText).orElse("");
-
-                    String link = card.findElement(
-                            By.xpath(".//a[contains(@href, '/jobs/view')]")).getAttribute("href");
-
-                    JobData jobData = JobData.builder()
-                            .title(title)
-                            .company(company)
-                            .location(location)
-                            .posted(postedTime)
-                            .jobUrl(link)
-                            .isEasyApply(easyApply)
-                            .description(description)
-                            .build();
-
-                    jobsList.add(jobData);
-
-                    if (random.nextBoolean()) {
-                        driver.navigate().back();
-                        randomDelay(2000, 4000);
+                List<By> selectors = List.of(
+                        By.xpath(".//strong/span[contains(text(),'ago')]"),
+                        By.xpath(".//span[contains(text(),'ago')]"));
+                String postedTime = "";
+                for (By selector : selectors) {
+                    try {
+                        String Time = card.findElement(selector).getText();
+                        if (Time != null && !Time.isBlank()) {
+                            postedTime = Time;
+                            break;
+                        }
+                    } catch (Exception e) {
                     }
-
-                } catch (Exception ignored) {
                 }
+                System.out.println("postedTime -" + postedTime);
+
+                String link = card.findElement(
+                        By.xpath(".//a[contains(@href, '/jobs/view')]"))
+                        .getAttribute("href");
+                System.out.println("link -" + link.length());
+
+                JobData jobData = JobData.builder()
+                        .title(title)
+                        .company(company)
+                        .location(location)
+                        .posted(postedTime)
+                        .jobUrl(link)
+                        .isEasyApply(easyApply)
+                        .description(description)
+                        .build();
+
+                jobsList.add(jobData);
+
+                randomDelay(1200, 2500);
+
+            } catch (StaleElementReferenceException ignored) {
+                // LinkedIn DOM refresh — just skip this card
+            } catch (Exception e) {
+                System.out.println("Error extracting job: " + e.getMessage());
             }
         }
+
         return jobsList;
+
     }
+
+    /* -------------------- SCORING -------------------- */
 
     private int calculateScore(JobData job) {
 
@@ -225,17 +219,18 @@ public class LinkedInService {
             score -= 6;
         if (desc.contains("0-2 years") || desc.contains("freshers"))
             score += 3;
+
         return Math.max(score, 0);
     }
 
     public List<JobData> filterBestJobs(List<JobData> jobs) {
 
         jobs.forEach(job -> job.setScore(calculateScore(job)));
+
         return jobs.stream()
                 .filter(job -> job.getScore() >= 7)
                 .sorted(Comparator.comparingInt(JobData::getScore).reversed())
                 .limit(30)
                 .toList();
     }
-
 }
