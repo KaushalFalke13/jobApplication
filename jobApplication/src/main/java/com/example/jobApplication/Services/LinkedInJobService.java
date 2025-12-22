@@ -10,13 +10,11 @@ import java.time.Duration;
 import java.util.*;
 
 @Service
-public class LinkedInService {
+public class LinkedInJobService {
 
     private static final By JOB_CARD_LOCATOR = By.cssSelector("div[data-job-id]");
     private static final By JOB_DETAILS_LOCATOR = By.cssSelector("div.jobs-description__content");
-
     private final Random random = new Random();
-
     private static final Map<String, Integer> SKILL_WEIGHTS = Map.of(
             "java", 4,
             "spring boot", 5,
@@ -24,6 +22,9 @@ public class LinkedInService {
             "microservices", 4,
             "hibernate", 2,
             "rest", 2,
+            "Kafka", 2,
+            "Redis", 2,
+            "docker", 2,
             "sql", 2);
 
     /* -------------------- HUMAN UTILITIES -------------------- */
@@ -61,12 +62,15 @@ public class LinkedInService {
 
     /* -------------------- CORE LOGIC -------------------- */
 
-    private String createURL() {
+    private String createURL(int page) {
+        int start = (page - 1) * 25;
+
         return "https://www.linkedin.com/jobs/search/?" +
                 "keywords=Java%20Developer" +
                 "&location=Pune%2C%20Maharashtra%2C%20India" +
                 "&f_TPR=r86400" +
-                "&f_E=2";
+                "&f_E=2" +
+                "&start=" + start;
     }
 
     /**
@@ -100,97 +104,97 @@ public class LinkedInService {
     public ArrayList<JobData> extractJobsDataFromLinkedIn(WebDriver driver) {
 
         WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(12));
+
         ArrayList<JobData> jobsList = new ArrayList<>();
 
-        driver.get(createURL());
-        randomDelay(4000, 7000);
-
-        loadAllJobCards(driver, wait);
-
         int maxJobsThisSession = random.nextInt(11) + 45;
+        for (int j = 0; j < 3; j++) {
 
-        for (int i = 0; i < driver.findElements(JOB_CARD_LOCATOR).size(); i++) {
+            driver.get(createURL(j));
+            randomDelay(4000, 7000);
+            loadAllJobCards(driver, wait);
 
-            if (jobsList.size() >= maxJobsThisSession)
-                break;
+            for (int i = 0; i < driver.findElements(JOB_CARD_LOCATOR).size(); i++) {
 
-            if (random.nextInt(10) < 2)
-                continue;
+                if (jobsList.size() >= maxJobsThisSession)
+                    break;
 
-            try {
-                // Re-fetch card to avoid stale reference
-                WebElement card = driver.findElements(JOB_CARD_LOCATOR).get(i);
+                if (random.nextInt(10) < 2)
+                    continue;
 
-                // Click card (updates right panel)
-                safeClick(driver, card);
+                try {
+                    // Re-fetch card to avoid stale reference
+                    WebElement card = driver.findElements(JOB_CARD_LOCATOR).get(i);
 
-                // Wait for new description
-                WebElement descEl = wait.until(
-                        ExpectedConditions.visibilityOfElementLocated(JOB_DETAILS_LOCATOR));
-                String description = descEl.getText();
-                System.out.println("Description -" + description.length());
-                readDelay(description);
+                    // Click card (updates right panel)
+                    safeClick(driver, card);
 
-                String title = card.findElement(
-                        By.xpath(".//a[contains(@href,'/jobs/view')]//span[@aria-hidden='true']//strong")).getText();
-                System.out.println("title -" + title);
+                    // Wait for new description
+                    WebElement descEl = wait.until(
+                            ExpectedConditions.visibilityOfElementLocated(JOB_DETAILS_LOCATOR));
+                    String description = descEl.getText();
+                    // System.out.println("Description -" + description.length());
+                    readDelay(description);
 
-                String company = card.findElement(
-                        By.xpath(".//div[contains(@class,'entity-lockup__subtitle')]//span"))
-                        .getText();
-                System.out.println("company -" + company);
+                    String title = card.findElement(
+                            By.xpath(".//a[contains(@href,'/jobs/view')]//span[@aria-hidden='true']//strong"))
+                            .getText();
+                    // System.out.println("title -" + title);
 
-                String location = card.findElement(
-                        By.xpath(".//ul[contains(@class,'job-card-container__metadata-wrapper')]/li[1]//span"))
-                        .getText();
-                System.out.println("location -" + location);
+                    String company = card.findElement(
+                            By.xpath(".//div[contains(@class,'entity-lockup__subtitle')]//span"))
+                            .getText();
+                    // System.out.println("company -" + company);
 
-                boolean easyApply = card.getText().toLowerCase().contains("easy apply");
+                    String location = card.findElement(
+                            By.xpath(".//ul[contains(@class,'job-card-container__metadata-wrapper')]/li[1]//span"))
+                            .getText();
+                    // System.out.println("location -" + location);
 
-                List<By> selectors = List.of(
-                        By.xpath(".//strong/span[contains(text(),'ago')]"),
-                        By.xpath(".//span[contains(text(),'ago')]"));
-                String postedTime = "";
-                for (By selector : selectors) {
-                    try {
-                        String Time = card.findElement(selector).getText();
-                        if (Time != null && !Time.isBlank()) {
-                            postedTime = Time;
-                            break;
+                    boolean easyApply = card.getText().toLowerCase().contains("easy apply");
+
+                    List<By> selectors = List.of(
+                            By.xpath(".//strong/span[contains(text(),'ago')]"),
+                            By.xpath(".//span[contains(text(),'ago')]"));
+                    String postedTime = "";
+                    for (By selector : selectors) {
+                        try {
+                            String Time = card.findElement(selector).getText();
+                            if (Time != null && !Time.isBlank()) {
+                                postedTime = Time;
+                                break;
+                            }
+                        } catch (Exception e) {
                         }
-                    } catch (Exception e) {
                     }
+                    // System.out.println("postedTime -" + postedTime);
+
+                    String link = card.findElement(
+                            By.xpath(".//a[contains(@href, '/jobs/view')]"))
+                            .getAttribute("href");
+                    // System.out.println("link -" + link.length());
+
+                    JobData jobData = JobData.builder()
+                            .title(title)
+                            .company(company)
+                            .location(location)
+                            .posted(postedTime)
+                            .jobUrl(link)
+                            .isEasyApply(easyApply)
+                            .description(description)
+                            .build();
+                    jobsList.add(jobData);
+
+                    randomDelay(1200, 2500);
+
+                } catch (StaleElementReferenceException ignored) {
+                    // LinkedIn DOM refresh — just skip this card
+                } catch (Exception e) {
+                    System.out.println("Error extracting job: " + e.getMessage());
                 }
-                System.out.println("postedTime -" + postedTime);
-
-                String link = card.findElement(
-                        By.xpath(".//a[contains(@href, '/jobs/view')]"))
-                        .getAttribute("href");
-                System.out.println("link -" + link.length());
-
-                JobData jobData = JobData.builder()
-                        .title(title)
-                        .company(company)
-                        .location(location)
-                        .posted(postedTime)
-                        .jobUrl(link)
-                        .isEasyApply(easyApply)
-                        .description(description)
-                        .build();
-
-                jobsList.add(jobData);
-
-                randomDelay(1200, 2500);
-
-            } catch (StaleElementReferenceException ignored) {
-                // LinkedIn DOM refresh — just skip this card
-            } catch (Exception e) {
-                System.out.println("Error extracting job: " + e.getMessage());
             }
         }
-
         return jobsList;
-
     }
 
     /* -------------------- SCORING -------------------- */
@@ -233,4 +237,5 @@ public class LinkedInService {
                 .limit(30)
                 .toList();
     }
+
 }

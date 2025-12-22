@@ -7,20 +7,20 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 import com.example.jobApplication.Repository.JobData;
-import com.example.jobApplication.Services.LinkedInService;
+import com.example.jobApplication.Services.LinkedInJobService;
 import com.example.jobApplication.Services.OpenAIService;
 import com.example.jobApplication.Services.linkedInHelper;
 
 @RestController
 public class JobApplicationController {
 
-    private final LinkedInService linkedInService;
+    private final LinkedInJobService linkedInService;
     private final WebDriver driver;
     private final linkedInHelper linkedInHelper;
     // private final OpenAIService openAIService;
 
     public JobApplicationController(
-            LinkedInService linkedInService,
+            LinkedInJobService linkedInService,
             WebDriver driver,
             linkedInHelper linkedInHelper,
             OpenAIService openAIService) {
