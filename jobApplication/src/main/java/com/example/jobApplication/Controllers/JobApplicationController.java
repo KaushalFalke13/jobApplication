@@ -7,8 +7,10 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 import com.example.jobApplication.Repository.JobData;
+import com.example.jobApplication.Repository.LinkedInJobPost;
 import com.example.jobApplication.Services.LinkedInJobService;
-import com.example.jobApplication.Services.OpenAIService;
+import com.example.jobApplication.Services.LinkedInPostService;
+// import com.example.jobApplication.Services.OpenAIService;
 import com.example.jobApplication.Services.linkedInHelper;
 
 @RestController
@@ -17,17 +19,19 @@ public class JobApplicationController {
     private final LinkedInJobService linkedInService;
     private final WebDriver driver;
     private final linkedInHelper linkedInHelper;
+    private final LinkedInPostService linkedInPostService;
     // private final OpenAIService openAIService;
 
     public JobApplicationController(
             LinkedInJobService linkedInService,
             WebDriver driver,
             linkedInHelper linkedInHelper,
-            OpenAIService openAIService) {
+            LinkedInPostService linkedInPostService) {
 
         this.linkedInService = linkedInService;
         this.driver = driver;
         this.linkedInHelper = linkedInHelper;
+        this.linkedInPostService = linkedInPostService;
         // this.openAIService = openAIService;
     }
 
@@ -59,10 +63,12 @@ public class JobApplicationController {
     }
 
     @GetMapping("/collectLinkedInPostData")
-    public ResponseEntity<String> collectLinkedInPostData() {
+    public ResponseEntity<?> collectLinkedInPostData() {
         try {
             linkedInHelper.ensureLoggedIn(driver);
-            return ResponseEntity.ok("Post data extracted");
+            List<LinkedInJobPost> posts = linkedInPostService.extractJobPosts(driver);
+
+            return ResponseEntity.ok(posts);
         } catch (Exception e) {
             e.printStackTrace();
             return ResponseEntity

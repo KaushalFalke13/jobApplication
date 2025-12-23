@@ -3,7 +3,6 @@ package com.example.jobApplication.Services;
 import org.springframework.stereotype.Service;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.client.RestTemplate;
@@ -22,7 +21,7 @@ public class OpenAIService {
     private static final String OPENAI_URL = "https://api.openai.com/v1/responses";
     private static final String MODEL = "gpt-4.1-mini";
 
-    @Value("${openai.api.key}")
+    // @Value("${openai.api.key}")
     private String API_KEY;
 
     @SuppressWarnings("null")
