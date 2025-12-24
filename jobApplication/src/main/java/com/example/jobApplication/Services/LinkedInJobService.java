@@ -73,9 +73,6 @@ public class LinkedInJobService {
                 "&start=" + start;
     }
 
-    /**
-     * Scroll job list until LinkedIn stops loading more cards
-     */
     private void loadAllJobCards(WebDriver driver, WebDriverWait wait) {
         WebElement list = wait.until(
                 ExpectedConditions.presenceOfElementLocated(

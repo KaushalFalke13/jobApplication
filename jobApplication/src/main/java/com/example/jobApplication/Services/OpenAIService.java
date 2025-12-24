@@ -27,7 +27,7 @@ public class OpenAIService {
     @SuppressWarnings("null")
     public List<JobData> getBestJobs(List<JobData> jobs) throws Exception {
 
-        String prompt = buildPrompt(jobs);
+        String prompt = buildPromptForJobSearch(jobs);
 
         Map<String, Object> body = Map.of(
                 "model", MODEL,
@@ -67,7 +67,7 @@ public class OpenAIService {
                 });
     }
 
-    private String buildPrompt(List<JobData> jobs) {
+    private String buildPromptForJobSearch(List<JobData> jobs) {
 
         StringBuilder sb = new StringBuilder();
 
