@@ -1,10 +1,8 @@
 package com.example.jobApplication.Repository;
 
 import java.time.LocalDateTime;
-
 import com.example.jobApplication.Services.Enums.JobStatus;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import jakarta.persistence.Entity;

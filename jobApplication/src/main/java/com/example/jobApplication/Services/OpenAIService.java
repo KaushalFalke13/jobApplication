@@ -24,7 +24,6 @@ public class OpenAIService {
     // @Value("${openai.api.key}")
     private String API_KEY;
 
-    @SuppressWarnings("null")
     public List<JobData> getBestJobs(List<JobData> jobs) throws Exception {
 
         String prompt = buildPromptForJobSearch(jobs);

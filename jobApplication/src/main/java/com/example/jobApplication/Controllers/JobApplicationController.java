@@ -8,6 +8,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 import com.example.jobApplication.Repository.JobData;
 import com.example.jobApplication.Repository.LinkedInJobPost;
+import com.example.jobApplication.Services.GoogleSheetsService;
 import com.example.jobApplication.Services.LinkedInJobService;
 import com.example.jobApplication.Services.LinkedInPostService;
 // import com.example.jobApplication.Services.OpenAIService;
@@ -20,15 +21,18 @@ public class JobApplicationController {
     private final WebDriver driver;
     private final linkedInHelper linkedInHelper;
     private final LinkedInPostService linkedInPostService;
+    private final GoogleSheetsService googleSheetsService;
     // private final OpenAIService openAIService;
 
     public JobApplicationController(
             LinkedInJobService linkedInService,
             WebDriver driver,
+            GoogleSheetsService googleSheetsService,
             linkedInHelper linkedInHelper,
             LinkedInPostService linkedInPostService) {
 
         this.linkedInService = linkedInService;
+        this.googleSheetsService = googleSheetsService;
         this.driver = driver;
         this.linkedInHelper = linkedInHelper;
         this.linkedInPostService = linkedInPostService;
@@ -45,11 +49,9 @@ public class JobApplicationController {
 
             List<JobData> filteredJobs = linkedInService.filterBestJobs(jobsList);
             System.out.println("Filtered Best Jobs: " + filteredJobs.size());
-
             // List<JobData> bestJobs = openAIService.getBestJobs(filteredJobs);
             // System.out.println("Top Jobs: " + sortedBestJobs.size());
-
-            // ✅ RETURN ACTUAL DATA
+            googleSheetsService.appendRows(filteredJobs);
             return ResponseEntity.ok(filteredJobs);
 
         } catch (Exception e) {
@@ -76,4 +78,14 @@ public class JobApplicationController {
                     .body("Failed to extract post data");
         }
     }
+
+    // @GetMapping("/TestSheet")
+    // private String testGooglesheet() throws Exception {
+    // googleSheetsService.appendRows(
+    // List.of(
+    // List.of("Company", "Role", "Status"),
+    // List.of("Google", "SWE", "Applied")));
+    // return "Data Send Succesfully";
+
+    // }
 }
